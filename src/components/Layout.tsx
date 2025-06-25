@@ -5,6 +5,7 @@ import { User } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import LandingPage from "./LandingPage";
 import AuthPage from "./auth/AuthPage";
+import GymRegistration from "./auth/GymRegistration";
 import Dashboard from "./dashboard/Dashboard";
 
 const Layout = () => {
@@ -42,7 +43,16 @@ const Layout = () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('*, gyms(*), branches(*)')
+        .select(`
+          *, 
+          gyms (
+            id, name, gym_code, email, phone, logo_url, theme_color,
+            address, city, state, country, postal_code
+          ), 
+          branches (
+            id, name, address, city, state, phone, email
+          )
+        `)
         .eq('id', userId)
         .single();
 
@@ -76,7 +86,12 @@ const Layout = () => {
     return <AuthPage user={user} onProfileCreated={setUserProfile} />;
   }
 
-  return <Dashboard user={user} profile={userProfile} />;
+  // If user has no gym_id, they need to register or join a gym
+  if (!userProfile.gym_id) {
+    return <GymRegistration user={user} profile={userProfile} onGymRegistered={setUserProfile} />;
+  }
+
+  return <Dashboard user={user} profile={userProfile} onProfileUpdate={setUserProfile} />;
 };
 
 export default Layout;

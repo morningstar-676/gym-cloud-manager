@@ -366,6 +366,57 @@ export type Database = {
           },
         ]
       }
+      default_workout_plans: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          gym_id: string
+          id: string
+          is_active: boolean | null
+          name: string
+          plan_data: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          gym_id: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          plan_data?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          gym_id?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          plan_data?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "default_workout_plans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "default_workout_plans_gym_id_fkey"
+            columns: ["gym_id"]
+            isOneToOne: false
+            referencedRelation: "gyms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gym_subscriptions: {
         Row: {
           created_at: string
@@ -420,6 +471,7 @@ export type Database = {
           created_at: string
           custom_domain: string | null
           email: string
+          gym_code: string | null
           id: string
           is_active: boolean | null
           logo_url: string | null
@@ -438,6 +490,7 @@ export type Database = {
           created_at?: string
           custom_domain?: string | null
           email: string
+          gym_code?: string | null
           id?: string
           is_active?: boolean | null
           logo_url?: string | null
@@ -456,6 +509,7 @@ export type Database = {
           created_at?: string
           custom_domain?: string | null
           email?: string
+          gym_code?: string | null
           id?: string
           is_active?: boolean | null
           logo_url?: string | null
@@ -519,6 +573,54 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          created_at: string
+          gym_id: string
+          id: string
+          is_read: boolean | null
+          message: string
+          recipient_id: string | null
+          title: string
+          type: string | null
+        }
+        Insert: {
+          created_at?: string
+          gym_id: string
+          id?: string
+          is_read?: boolean | null
+          message: string
+          recipient_id?: string | null
+          title: string
+          type?: string | null
+        }
+        Update: {
+          created_at?: string
+          gym_id?: string
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          recipient_id?: string | null
+          title?: string
+          type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_gym_id_fkey"
+            columns: ["gym_id"]
+            isOneToOne: false
+            referencedRelation: "gyms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -533,6 +635,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           last_name: string | null
+          member_code: string | null
           phone: string | null
           qr_code: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -551,6 +654,7 @@ export type Database = {
           id: string
           is_active?: boolean | null
           last_name?: string | null
+          member_code?: string | null
           phone?: string | null
           qr_code?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -569,6 +673,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           last_name?: string | null
+          member_code?: string | null
           phone?: string | null
           qr_code?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -702,9 +807,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      generate_member_code: {
+        Args: { gym_id_param: string }
+        Returns: string
+      }
       get_current_user_gym_id: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_gym_count_for_code: {
+        Args: { code: string }
+        Returns: number
       }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["user_role"] }
