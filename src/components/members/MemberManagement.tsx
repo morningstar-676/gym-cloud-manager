@@ -1,66 +1,64 @@
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UserPlus, Search, Filter, Download, QrCode } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UserPlus, Search, Filter, Download, Mail, Phone, QrCode, Calendar, Activity } from "lucide-react";
 
 interface MemberManagementProps {
   gymId: string;
   userRole: string;
+  userId: string;
 }
 
-const MemberManagement = ({ gymId, userRole }: MemberManagementProps) => {
+const MemberManagement = ({ gymId, userRole, userId }: MemberManagementProps) => {
   const [members, setMembers] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedBranch, setSelectedBranch] = useState<string>("all");
-  const [selectedRole, setSelectedRole] = useState<string>("all");
-  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [filterRole, setFilterRole] = useState("all");
+  const [showAddMember, setShowAddMember] = useState(false);
   const [newMember, setNewMember] = useState({
+    email: "",
     first_name: "",
     last_name: "",
-    email: "",
     phone: "",
-    role: "member",
-    branch_id: "",
-    date_of_birth: "",
-    emergency_contact: "",
-    emergency_phone: ""
+    role: "member" as "super_admin" | "gym_admin" | "trainer" | "staff" | "member"
   });
   const { toast } = useToast();
 
   useEffect(() => {
     fetchMembers();
-    fetchBranches();
   }, [gymId]);
 
   const fetchMembers = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('profiles')
         .select(`
-          *,
-          branches (id, name),
-          member_subscriptions (
-            id, plan_name, start_date, end_date, is_active
-          )
+          id, email, first_name, last_name, phone, role, member_code, qr_code, 
+          created_at, branch_id, branches(name)
         `)
-        .eq('gym_id', gymId)
-        .order('created_at', { ascending: false });
+        .eq('gym_id', gymId);
+
+      // Filter based on user role
+      if (userRole === 'trainer') {
+        // Trainers can only see members assigned to them
+        query = query.eq('role', 'member');
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
       setMembers(data || []);
-    } catch (error: any) {
+    } catch (error) {
+      console.error('Error fetching members:', error);
       toast({
         title: "Error",
         description: "Failed to load members",
@@ -71,111 +69,53 @@ const MemberManagement = ({ gymId, userRole }: MemberManagementProps) => {
     }
   };
 
-  const fetchBranches = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('branches')
-        .select('*')
-        .eq('gym_id', gymId)
-        .eq('is_active', true);
-
-      if (error) throw error;
-      setBranches(data || []);
-    } catch (error: any) {
-      console.error('Error fetching branches:', error);
-    }
-  };
-
-  const handleAddMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
+  const handleAddMember = async () => {
     try {
       // Create auth user first
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: newMember.email,
         password: Math.random().toString(36).slice(-8), // Temporary password
-        user_metadata: {
-          first_name: newMember.first_name,
-          last_name: newMember.last_name
-        }
+        email_confirm: true
       });
 
       if (authError) throw authError;
 
-      // Update profile
+      // Create profile
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          gym_id: gymId,
-          branch_id: newMember.branch_id || null,
-          role: newMember.role,
+        .insert({
+          id: authData.user.id,
+          email: newMember.email,
           first_name: newMember.first_name,
           last_name: newMember.last_name,
-          email: newMember.email,
           phone: newMember.phone,
-          date_of_birth: newMember.date_of_birth || null,
-          emergency_contact: newMember.emergency_contact || null,
-          emergency_phone: newMember.emergency_phone || null
-        })
-        .eq('id', authData.user.id);
+          role: newMember.role,
+          gym_id: gymId
+        });
 
       if (profileError) throw profileError;
 
       toast({
-        title: "Member Added Successfully",
-        description: `${newMember.first_name} ${newMember.last_name} has been added to your gym`,
+        title: "Success",
+        description: `${newMember.role.charAt(0).toUpperCase() + newMember.role.slice(1)} added successfully`,
       });
 
-      setIsAddingMember(false);
+      setShowAddMember(false);
       setNewMember({
+        email: "",
         first_name: "",
         last_name: "",
-        email: "",
         phone: "",
-        role: "member",
-        branch_id: "",
-        date_of_birth: "",
-        emergency_contact: "",
-        emergency_phone: ""
+        role: "member"
       });
-      
       fetchMembers();
     } catch (error: any) {
       toast({
-        title: "Error Adding Member",
+        title: "Error",
         description: error.message,
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  };
-
-  const generateMemberQR = (member: any) => {
-    // In a real implementation, this would generate an actual QR code image
-    const qrData = `${window.location.origin}/member/${member.member_code}`;
-    
-    // Create a simple QR code representation
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 200;
-    canvas.height = 200;
-    
-    if (ctx) {
-      // Draw a simple placeholder QR code
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, 200, 200);
-      ctx.fillStyle = '#fff';
-      ctx.font = '12px Arial';
-      ctx.fillText(member.member_code, 10, 20);
-    }
-    
-    // Download the QR code
-    const link = document.createElement('a');
-    link.download = `${member.member_code}-qr.png`;
-    link.href = canvas.toDataURL();
-    link.click();
   };
 
   const filteredMembers = members.filter(member => {
@@ -185,278 +125,211 @@ const MemberManagement = ({ gymId, userRole }: MemberManagementProps) => {
       member.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       member.member_code?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesBranch = selectedBranch === "all" || member.branch_id === selectedBranch;
-    const matchesRole = selectedRole === "all" || member.role === selectedRole;
+    const matchesRole = filterRole === "all" || member.role === filterRole;
     
-    return matchesSearch && matchesBranch && matchesRole;
+    return matchesSearch && matchesRole;
   });
+
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case 'super_admin': return 'bg-purple-500';
+      case 'gym_admin': return 'bg-blue-500';
+      case 'trainer': return 'bg-green-500';
+      case 'staff': return 'bg-orange-500';
+      case 'member': return 'bg-gray-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  if (loading) {
+    return <div className="flex justify-center p-8">Loading members...</div>;
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold">Member Management</h2>
-          <p className="text-gray-600">Manage your gym members and staff</p>
+          <h2 className="text-2xl font-bold text-gray-900">Member Management</h2>
+          <p className="text-gray-600">Manage gym members, staff, and trainers</p>
         </div>
         
         {(userRole === 'gym_admin' || userRole === 'super_admin') && (
-          <Dialog open={isAddingMember} onOpenChange={setIsAddingMember}>
+          <Dialog open={showAddMember} onOpenChange={setShowAddMember}>
             <DialogTrigger asChild>
-              <Button>
-                <UserPlus className="h-4 w-4 mr-2" />
+              <Button className="flex items-center gap-2">
+                <UserPlus className="h-4 w-4" />
                 Add Member
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add New Member</DialogTitle>
                 <DialogDescription>
-                  Add a new member or staff to your gym
+                  Create a new member account for your gym
                 </DialogDescription>
               </DialogHeader>
               
-              <form onSubmit={handleAddMember} className="space-y-4">
+              <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="firstName">First Name *</Label>
+                    <Label htmlFor="first_name">First Name</Label>
                     <Input
-                      id="firstName"
+                      id="first_name"
                       value={newMember.first_name}
-                      onChange={(e) => setNewMember({ ...newMember, first_name: e.target.value })}
-                      required
+                      onChange={(e) => setNewMember({...newMember, first_name: e.target.value})}
+                      placeholder="John"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="lastName">Last Name *</Label>
+                    <Label htmlFor="last_name">Last Name</Label>
                     <Input
-                      id="lastName"
+                      id="last_name"
                       value={newMember.last_name}
-                      onChange={(e) => setNewMember({ ...newMember, last_name: e.target.value })}
-                      required
+                      onChange={(e) => setNewMember({...newMember, last_name: e.target.value})}
+                      placeholder="Doe"
                     />
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="email">Email *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={newMember.email}
-                      onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input
-                      id="phone"
-                      value={newMember.phone}
-                      onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="role">Role *</Label>
-                    <Select value={newMember.role} onValueChange={(value) => setNewMember({ ...newMember, role: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="member">Member</SelectItem>
-                        <SelectItem value="trainer">Trainer</SelectItem>
-                        <SelectItem value="staff">Staff</SelectItem>
-                        {userRole === 'super_admin' && <SelectItem value="gym_admin">Gym Admin</SelectItem>}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="branch">Branch</Label>
-                    <Select value={newMember.branch_id} onValueChange={(value) => setNewMember({ ...newMember, branch_id: value })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {branches.map(branch => (
-                          <SelectItem key={branch.id} value={branch.id}>
-                            {branch.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="dob">Date of Birth</Label>
-                    <Input
-                      id="dob"
-                      type="date"
-                      value={newMember.date_of_birth}
-                      onChange={(e) => setNewMember({ ...newMember, date_of_birth: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="emergencyContact">Emergency Contact</Label>
-                    <Input
-                      id="emergencyContact"
-                      value={newMember.emergency_contact}
-                      onChange={(e) => setNewMember({ ...newMember, emergency_contact: e.target.value })}
-                    />
-                  </div>
-                </div>
-
+                
                 <div>
-                  <Label htmlFor="emergencyPhone">Emergency Phone</Label>
+                  <Label htmlFor="email">Email</Label>
                   <Input
-                    id="emergencyPhone"
-                    value={newMember.emergency_phone}
-                    onChange={(e) => setNewMember({ ...newMember, emergency_phone: e.target.value })}
+                    id="email"
+                    type="email"
+                    value={newMember.email}
+                    onChange={(e) => setNewMember({...newMember, email: e.target.value})}
+                    placeholder="john.doe@example.com"
                   />
                 </div>
-
-                <div className="flex gap-2 pt-4">
-                  <Button type="submit" disabled={loading}>
-                    {loading ? "Adding..." : "Add Member"}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => setIsAddingMember(false)}>
-                    Cancel
-                  </Button>
+                
+                <div>
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    value={newMember.phone}
+                    onChange={(e) => setNewMember({...newMember, phone: e.target.value})}
+                    placeholder="+1 234 567 8900"
+                  />
                 </div>
-              </form>
+                
+                <div>
+                  <Label htmlFor="role">Role</Label>
+                  <Select value={newMember.role} onValueChange={(value: "super_admin" | "gym_admin" | "trainer" | "staff" | "member") => setNewMember({...newMember, role: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member">Member</SelectItem>
+                      <SelectItem value="staff">Staff</SelectItem>
+                      <SelectItem value="trainer">Trainer</SelectItem>
+                      {userRole === 'super_admin' && <SelectItem value="gym_admin">Gym Admin</SelectItem>}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <Button onClick={handleAddMember} className="w-full">
+                  Add Member
+                </Button>
+              </div>
             </DialogContent>
           </Dialog>
         )}
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex gap-4 flex-wrap">
-            <div className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  placeholder="Search members..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+      {/* Search and Filter */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            placeholder="Search members..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        
+        <Select value={filterRole} onValueChange={setFilterRole}>
+          <SelectTrigger className="w-full sm:w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Roles</SelectItem>
+            <SelectItem value="member">Members</SelectItem>
+            <SelectItem value="trainer">Trainers</SelectItem>
+            <SelectItem value="staff">Staff</SelectItem>
+            <SelectItem value="gym_admin">Gym Admin</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Members Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredMembers.map((member) => (
+          <Card key={member.id} className="hover:shadow-lg transition-shadow">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
+                    {member.first_name?.[0]}{member.last_name?.[0]}
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">
+                      {member.first_name} {member.last_name}
+                    </CardTitle>
+                    <CardDescription>{member.email}</CardDescription>
+                  </div>
+                </div>
+                <Badge className={`${getRoleColor(member.role)} text-white`}>
+                  {member.role.replace('_', ' ')}
+                </Badge>
               </div>
-            </div>
+            </CardHeader>
             
-            <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="All Branches" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Branches</SelectItem>
-                {branches.map(branch => (
-                  <SelectItem key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CardContent className="space-y-3">
+              {member.member_code && (
+                <div className="flex items-center gap-2 text-sm">
+                  <QrCode className="h-4 w-4 text-gray-500" />
+                  <span className="font-mono">{member.member_code}</span>
+                </div>
+              )}
+              
+              {member.phone && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Phone className="h-4 w-4 text-gray-500" />
+                  <span>{member.phone}</span>
+                </div>
+              )}
+              
+              {member.branches?.name && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Calendar className="h-4 w-4 text-gray-500" />
+                  <span>{member.branches.name}</span>
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Activity className="h-4 w-4" />
+                <span>Joined {new Date(member.created_at).toLocaleDateString()}</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-            <Select value={selectedRole} onValueChange={setSelectedRole}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="All Roles" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
-                <SelectItem value="member">Members</SelectItem>
-                <SelectItem value="trainer">Trainers</SelectItem>
-                <SelectItem value="staff">Staff</SelectItem>
-                <SelectItem value="gym_admin">Gym Admins</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Members Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle>Members ({filteredMembers.length})</CardTitle>
-              <CardDescription>
-                View and manage all gym members
-              </CardDescription>
-            </div>
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Member</TableHead>
-                <TableHead>Member Code</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Branch</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredMembers.map((member) => (
-                <TableRow key={member.id}>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">
-                        {member.first_name} {member.last_name}
-                      </p>
-                      <p className="text-sm text-gray-500">{member.email}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{member.member_code || 'Pending'}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={
-                      member.role === 'gym_admin' ? 'default' :
-                      member.role === 'trainer' ? 'secondary' :
-                      member.role === 'staff' ? 'outline' : 'secondary'
-                    }>
-                      {member.role.replace('_', ' ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{member.branches?.name || 'No Branch'}</TableCell>
-                  <TableCell>{member.phone || '-'}</TableCell>
-                  <TableCell>
-                    <Badge variant={member.is_active ? 'default' : 'destructive'}>
-                      {member.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      {member.role === 'member' && member.qr_code && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => generateMemberQR(member)}
-                        >
-                          <QrCode className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {filteredMembers.length === 0 && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <UserPlus className="h-12 w-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No members found</h3>
+            <p className="text-gray-600 text-center">
+              {searchTerm || filterRole !== "all" 
+                ? "Try adjusting your search or filter criteria."
+                : "Start by adding your first member to the gym."
+              }
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
