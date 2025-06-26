@@ -51,6 +51,9 @@ const Layout = () => {
           ), 
           branches (
             id, name, address, city, state, phone, email
+          ),
+          member_subscriptions (
+            id, start_date, end_date, is_active, plan_name
           )
         `)
         .eq('id', userId)
@@ -72,8 +75,8 @@ const Layout = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400"></div>
       </div>
     );
   }

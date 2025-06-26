@@ -14,10 +14,12 @@ import {
   UserPlus, 
   BarChart3,
   Settings,
-  Home
+  Home,
+  Library,
+  Bell,
+  ArrowLeft
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SuperAdminDashboard from "./SuperAdminDashboard";
 import GymAdminDashboard from "./GymAdminDashboard";
 import TrainerDashboard from "./TrainerDashboard";
@@ -28,6 +30,10 @@ import ClassManagement from "../classes/ClassManagement";
 import QRScanner from "../scanner/QRScanner";
 import WorkoutPlanManagement from "../workouts/WorkoutPlanManagement";
 import AttendanceTracking from "../attendance/AttendanceTracking";
+import NotificationCenter from "../notifications/NotificationCenter";
+import SubscriptionGuard from "../subscription/SubscriptionGuard";
+import ContentLibrary from "../content/ContentLibrary";
+import ReportsSection from "../reports/ReportsSection";
 
 interface DashboardProps {
   user: User;
@@ -37,6 +43,7 @@ interface DashboardProps {
 
 const Dashboard = ({ user, profile, onProfileUpdate }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState("overview");
+  const [showLandingPage, setShowLandingPage] = useState(false);
   const { toast } = useToast();
 
   const handleSignOut = async () => {
@@ -87,7 +94,9 @@ const Dashboard = ({ user, profile, onProfileUpdate }: DashboardProps) => {
           { id: 'members', label: 'Members', icon: Users },
           { id: 'classes', label: 'Classes', icon: Calendar },
           { id: 'workouts', label: 'Workout Plans', icon: Dumbbell },
+          { id: 'content', label: 'Content Library', icon: Library },
           { id: 'attendance', label: 'Attendance', icon: Activity },
+          { id: 'reports', label: 'Reports', icon: BarChart3 },
           { id: 'scanner', label: 'QR Scanner', icon: QrCode }
         ];
       
@@ -97,6 +106,7 @@ const Dashboard = ({ user, profile, onProfileUpdate }: DashboardProps) => {
           { id: 'members', label: 'My Members', icon: Users },
           { id: 'classes', label: 'My Classes', icon: Calendar },
           { id: 'workouts', label: 'Workout Plans', icon: Dumbbell },
+          { id: 'content', label: 'Content Library', icon: Library },
           { id: 'attendance', label: 'Attendance', icon: Activity }
         ];
       
@@ -113,7 +123,9 @@ const Dashboard = ({ user, profile, onProfileUpdate }: DashboardProps) => {
           ...baseItems,
           { id: 'classes', label: 'Classes', icon: Calendar },
           { id: 'workouts', label: 'My Workouts', icon: Dumbbell },
-          { id: 'attendance', label: 'My Attendance', icon: Activity }
+          { id: 'content', label: 'Content Library', icon: Library },
+          { id: 'attendance', label: 'My Attendance', icon: Activity },
+          { id: 'reports', label: 'My Reports', icon: BarChart3 }
         ];
       
       default:
@@ -125,65 +137,95 @@ const Dashboard = ({ user, profile, onProfileUpdate }: DashboardProps) => {
     const commonProps = {
       gymId: profile.gym_id,
       userRole: profile.role,
-      userId: user.id
+      userId: user.id,
+      userProfile: profile
     };
 
-    switch (activeTab) {
-      case 'overview':
-        switch (profile.role) {
-          case 'super_admin':
-            return <SuperAdminDashboard user={user} profile={profile} />;
-          case 'gym_admin':
-            return <GymAdminDashboard user={user} profile={profile} />;
-          case 'trainer':
-            return <TrainerDashboard user={user} profile={profile} />;
-          case 'staff':
-            return <StaffDashboard user={user} profile={profile} />;
-          case 'member':
-            return <MemberDashboard user={user} profile={profile} />;
-          default:
-            return <div>Unknown role</div>;
-        }
-      
-      case 'members':
-        return <MemberManagement {...commonProps} />;
-      
-      case 'classes':
-        return <ClassManagement {...commonProps} />;
-      
-      case 'scanner':
-        return (
-          <QRScanner 
-            gymId={profile.gym_id}
-            branchId={profile.branch_id || profile.gyms?.branches?.[0]?.id || ''}
-            scannedBy={user.id}
-          />
-        );
-      
-      case 'workouts':
-        return <WorkoutPlanManagement {...commonProps} />;
-      
-      case 'attendance':
-        return <AttendanceTracking {...commonProps} />;
-      
-      default:
-        return <div>Content not found</div>;
-    }
+    const protectedFeatures = ['classes', 'workouts', 'content', 'reports'];
+    const requiresSubscriptionGuard = protectedFeatures.includes(activeTab) && profile.role === 'member';
+
+    const content = (() => {
+      switch (activeTab) {
+        case 'overview':
+          switch (profile.role) {
+            case 'super_admin':
+              return <SuperAdminDashboard user={user} profile={profile} />;
+            case 'gym_admin':
+              return <GymAdminDashboard user={user} profile={profile} />;
+            case 'trainer':
+              return <TrainerDashboard user={user} profile={profile} />;
+            case 'staff':
+              return <StaffDashboard user={user} profile={profile} />;
+            case 'member':
+              return <MemberDashboard user={user} profile={profile} />;
+            default:
+              return <div>Unknown role</div>;
+          }
+        
+        case 'members':
+          return <MemberManagement {...commonProps} />;
+        
+        case 'classes':
+          return <ClassManagement {...commonProps} />;
+        
+        case 'scanner':
+          return (
+            <QRScanner 
+              gymId={profile.gym_id}
+              branchId={profile.branch_id || profile.gyms?.branches?.[0]?.id || ''}
+              scannedBy={user.id}
+            />
+          );
+        
+        case 'workouts':
+          return <WorkoutPlanManagement {...commonProps} />;
+        
+        case 'content':
+          return <ContentLibrary {...commonProps} />;
+        
+        case 'attendance':
+          return <AttendanceTracking {...commonProps} />;
+        
+        case 'reports':
+          return <ReportsSection {...commonProps} />;
+        
+        default:
+          return <div>Content not found</div>;
+      }
+    })();
+
+    return requiresSubscriptionGuard ? (
+      <SubscriptionGuard userProfile={profile} feature={activeTab}>
+        {content}
+      </SubscriptionGuard>
+    ) : content;
   };
+
+  if (showLandingPage) {
+    // This would show the landing page - implement navigation back logic
+    return <div>Landing Page</div>;
+  }
 
   const navigationItems = getNavigationItems();
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b sticky top-0 z-50">
+      <header className="bg-slate-800/90 backdrop-blur-sm shadow-lg border-b border-purple-500/20 sticky top-0 z-50">
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-600 rounded-lg">
-              <Dumbbell className="h-6 w-6 text-white" />
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowLandingPage(true)}
+              className="p-2 hover:bg-purple-600/20"
+            >
+              <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg">
+                <Dumbbell className="h-6 w-6 text-white" />
+              </div>
+            </Button>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">
+              <h1 className="text-xl font-bold text-white">
                 {profile.gyms?.name || 'GymCloud'}
               </h1>
               <div className="flex items-center gap-2">
@@ -191,12 +233,12 @@ const Dashboard = ({ user, profile, onProfileUpdate }: DashboardProps) => {
                   {profile.role.replace('_', ' ').toUpperCase()}
                 </Badge>
                 {profile.gyms?.gym_code && (
-                  <Badge variant="outline">
+                  <Badge variant="outline" className="border-purple-400 text-purple-300">
                     Gym: {profile.gyms.gym_code}
                   </Badge>
                 )}
                 {profile.member_code && (
-                  <Badge variant="outline">
+                  <Badge variant="outline" className="border-purple-400 text-purple-300">
                     Member: {profile.member_code}
                   </Badge>
                 )}
@@ -205,13 +247,14 @@ const Dashboard = ({ user, profile, onProfileUpdate }: DashboardProps) => {
           </div>
 
           <div className="flex items-center space-x-4">
+            <NotificationCenter userId={user.id} gymId={profile.gym_id} />
             <div className="text-right">
-              <p className="text-sm font-medium text-gray-900">
+              <p className="text-sm font-medium text-white">
                 {profile.first_name} {profile.last_name}
               </p>
-              <p className="text-xs text-gray-500">{profile.email}</p>
+              <p className="text-xs text-purple-300">{profile.email}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={handleSignOut}>
+            <Button variant="outline" size="sm" onClick={handleSignOut} className="border-purple-400 text-purple-300 hover:bg-purple-600/20">
               <LogOut className="h-4 w-4 mr-2" />
               Sign Out
             </Button>
@@ -219,7 +262,7 @@ const Dashboard = ({ user, profile, onProfileUpdate }: DashboardProps) => {
         </div>
 
         {/* Navigation */}
-        <div className="border-t bg-gray-50">
+        <div className="border-t border-purple-500/20 bg-slate-800/50">
           <div className="px-6">
             <nav className="flex space-x-8 overflow-x-auto">
               {navigationItems.map((item) => (
@@ -228,8 +271,8 @@ const Dashboard = ({ user, profile, onProfileUpdate }: DashboardProps) => {
                   onClick={() => setActiveTab(item.id)}
                   className={`flex items-center gap-2 py-3 px-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                     activeTab === item.id
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'border-purple-400 text-purple-300'
+                      : 'border-transparent text-gray-400 hover:text-purple-300 hover:border-purple-500/50'
                   }`}
                 >
                   <item.icon className="h-4 w-4" />

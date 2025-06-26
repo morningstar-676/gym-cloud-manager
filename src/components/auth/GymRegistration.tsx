@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
@@ -8,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users } from "lucide-react";
+import { Building2, Users, ArrowLeft } from "lucide-react";
 
 interface GymRegistrationProps {
   user: User;
@@ -30,6 +29,7 @@ const GymRegistration = ({ user, profile, onGymRegistered }: GymRegistrationProp
     postal_code: ""
   });
   const [joinCode, setJoinCode] = useState("");
+  const [showHomePage, setShowHomePage] = useState(false);
   const { toast } = useToast();
 
   const handleCreateGym = async (e: React.FormEvent) => {
@@ -37,12 +37,12 @@ const GymRegistration = ({ user, profile, onGymRegistered }: GymRegistrationProp
     setLoading(true);
 
     try {
-      // Validate gym code (2 digits)
-      if (!/^[a-zA-Z0-9]{2}$/.test(gymData.gymCode)) {
-        throw new Error("Gym code must be exactly 2 characters (letters or numbers)");
+      // Validate gym code (2-4 characters)
+      if (!/^[a-zA-Z0-9]{2,4}$/.test(gymData.gymCode)) {
+        throw new Error("Gym code must be 2-4 characters (letters or numbers)");
       }
 
-      // Get gym count for this code
+      // Get gym count for this code to generate final gym_code
       const { data: countData, error: countError } = await supabase
         .rpc('get_gym_count_for_code', { code: gymData.gymCode });
 
@@ -82,6 +82,9 @@ const GymRegistration = ({ user, profile, onGymRegistered }: GymRegistrationProp
           gyms (
             id, name, gym_code, email, phone, logo_url, theme_color,
             address, city, state, country, postal_code
+          ),
+          member_subscriptions (
+            id, start_date, end_date, is_active, plan_name
           )
         `)
         .single();
@@ -134,6 +137,9 @@ const GymRegistration = ({ user, profile, onGymRegistered }: GymRegistrationProp
           gyms (
             id, name, gym_code, email, phone, logo_url, theme_color,
             address, city, state, country, postal_code
+          ),
+          member_subscriptions (
+            id, start_date, end_date, is_active, plan_name
           )
         `)
         .single();
@@ -157,23 +163,42 @@ const GymRegistration = ({ user, profile, onGymRegistered }: GymRegistrationProp
     }
   };
 
+  if (showHomePage) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+        <LandingPage />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
+      <Card className="w-full max-w-2xl bg-slate-800/90 border-purple-500/20">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Welcome to GymCloud!</CardTitle>
-          <CardDescription>
+          <div className="flex items-center justify-between mb-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowHomePage(true)}
+              className="text-purple-400 hover:text-purple-300"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Home
+            </Button>
+          </div>
+          <CardTitle className="text-2xl font-bold text-white">Welcome to GymCloud!</CardTitle>
+          <CardDescription className="text-purple-200">
             Create your gym or join an existing one to get started
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="create" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="create" className="flex items-center gap-2">
+            <TabsList className="grid w-full grid-cols-2 bg-slate-700">
+              <TabsTrigger value="create" className="flex items-center gap-2 data-[state=active]:bg-purple-600">
                 <Building2 className="h-4 w-4" />
                 Create Gym
               </TabsTrigger>
-              <TabsTrigger value="join" className="flex items-center gap-2">
+              <TabsTrigger value="join" className="flex items-center gap-2 data-[state=active]:bg-purple-600">
                 <Users className="h-4 w-4" />
                 Join Gym
               </TabsTrigger>
@@ -183,25 +208,30 @@ const GymRegistration = ({ user, profile, onGymRegistered }: GymRegistrationProp
               <form onSubmit={handleCreateGym} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="gymName">Gym Name *</Label>
+                    <Label htmlFor="gymName" className="text-white">Gym Name *</Label>
                     <Input
                       id="gymName"
                       value={gymData.name}
                       onChange={(e) => setGymData({ ...gymData, name: e.target.value })}
                       placeholder="My Awesome Gym"
+                      className="bg-slate-700 border-slate-600 text-white"
                       required
                     />
                   </div>
                   <div>
-                    <Label htmlFor="gymCode">2-Digit Gym Code *</Label>
+                    <Label htmlFor="gymCode" className="text-white">2-4 Digit Gym Code *</Label>
                     <Input
                       id="gymCode"
                       value={gymData.gymCode}
-                      onChange={(e) => setGymData({ ...gymData, gymCode: e.target.value.slice(0, 2) })}
+                      onChange={(e) => setGymData({ ...gymData, gymCode: e.target.value.slice(0, 4) })}
                       placeholder="BS"
-                      maxLength={2}
+                      maxLength={4}
+                      className="bg-slate-700 border-slate-600 text-white"
                       required
                     />
+                    <p className="text-xs text-purple-300 mt-1">
+                      Will become: {gymData.gymCode}1, {gymData.gymCode}2, etc.
+                    </p>
                   </div>
                 </div>
                 
@@ -268,7 +298,7 @@ const GymRegistration = ({ user, profile, onGymRegistered }: GymRegistrationProp
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button type="submit" className="w-full bg-purple-600 hover:bg-purple-700" disabled={loading}>
                   {loading ? "Creating Gym..." : "Create Gym"}
                 </Button>
               </form>
@@ -277,20 +307,21 @@ const GymRegistration = ({ user, profile, onGymRegistered }: GymRegistrationProp
             <TabsContent value="join">
               <form onSubmit={handleJoinGym} className="space-y-4">
                 <div>
-                  <Label htmlFor="joinCode">Gym Code</Label>
+                  <Label htmlFor="joinCode" className="text-white">Gym Code</Label>
                   <Input
                     id="joinCode"
                     value={joinCode}
                     onChange={(e) => setJoinCode(e.target.value)}
                     placeholder="Enter gym code (e.g., bs1)"
+                    className="bg-slate-700 border-slate-600 text-white"
                     required
                   />
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-purple-300 mt-1">
                     Ask your gym administrator for the gym code
                   </p>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button type="submit" className="w-full bg-purple-600 hover:bg-purple-700" disabled={loading}>
                   {loading ? "Joining..." : "Join Gym"}
                 </Button>
               </form>
